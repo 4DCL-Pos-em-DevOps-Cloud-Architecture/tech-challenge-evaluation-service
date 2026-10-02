@@ -64,7 +64,7 @@ func main() {
 	}
 
 	// --- Inicializa Clientes ---
-	
+
 	// Cliente Redis
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
