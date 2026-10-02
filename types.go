@@ -14,10 +14,10 @@ type Flag struct {
 
 // TargetingRule espelha a resposta do targeting-service
 type TargetingRule struct {
-	ID         int    `json:"id"`
-	FlagName   string `json:"flag_name"`
-	IsEnabled  bool   `json:"is_enabled"`
-	Rules      Rule   `json:"rules"` // O objeto JSONB
+	ID        int    `json:"id"`
+	FlagName  string `json:"flag_name"`
+	IsEnabled bool   `json:"is_enabled"`
+	Rules     Rule   `json:"rules"` // O objeto JSONB
 }
 
 // Rule é o objeto JSONB aninhado
@@ -36,6 +36,7 @@ type CombinedFlagInfo struct {
 type NotFoundError struct {
 	FlagName string
 }
+
 func (e *NotFoundError) Error() string {
 	return fmt.Sprintf("flag ou regra '%s' não encontrada", e.FlagName)
 }

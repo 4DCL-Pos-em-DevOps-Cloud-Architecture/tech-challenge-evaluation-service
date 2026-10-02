@@ -46,7 +46,7 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 		// Se o unmarshal falhar, trata como cache miss
 		log.Printf("Erro ao desserializar cache para flag '%s': %v", flagName, err)
 	}
-	
+
 	log.Printf("Cache MISS para flag '%s'", flagName)
 	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
