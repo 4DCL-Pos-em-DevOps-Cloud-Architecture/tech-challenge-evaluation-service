@@ -37,7 +37,16 @@ jobs:
 
       - name: 🎨 Verificar formatação
         shell: bash
-        run: test -z "$(gofmt -l .)"
+        run: |
+          files=$(find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -l)
+
+          if [ -n "$files" ]; then
+            echo "Arquivos fora do padrão gofmt:"
+            echo "$files"
+            echo "Diferenças:"
+            find . -name '*.go' -not -path './vendor/*' -print0 | xargs -0 gofmt -d
+            exit 1
+          fi
 
       - name: 🧪 Executar testes
         run: go test ./...
