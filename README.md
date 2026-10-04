@@ -101,3 +101,32 @@ Saída (exemplo): `{"flag_name":"enable-new-dashboard","user_id":"user-abc","res
 
 **4. Verifique a Fila SQS:** Após fazer as chamadas acima, vá até o console da AWS, abra sua fila SQS e verifique se as mensagens (`EvaluationEvent`) estão chegando.
 
+## Manifestos Kubernetes
+
+Os manifestos deste serviço estão em `k8s/`. O serviço é publicado pelo Ingress na rota `/evaluate`.
+
+Antes da aplicação, substitua os seguintes valores:
+
+| Placeholder | Descrição |
+|---|---|
+| `<REGISTRY_URL>` | URI do registro ECR, por exemplo `123456789012.dkr.ecr.us-east-1.amazonaws.com` |
+| `<URL_DA_FILA_SQS>` | URL da fila SQS usada para publicar eventos de avaliação |
+| `<URL_DO_REDIS>` | URL de conexão do Redis |
+| `<BASE64_ENCODED_SERVICE_API_KEY>` | Chave de API do serviço codificada em Base64 |
+
+O Secret `aws-credentials` também deve existir no namespace `evaluation-service` para permitir o acesso à AWS. Não versione credenciais reais.
+
+Aplicação dos recursos:
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/hpa.yaml
+kubectl apply -f k8s/ingress.yaml
+```
+
+O endpoint externo fica disponível em `/evaluate`. O health check interno é `/health` na porta `8004`.
+
