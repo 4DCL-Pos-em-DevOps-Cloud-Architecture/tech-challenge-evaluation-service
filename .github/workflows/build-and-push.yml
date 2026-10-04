@@ -54,6 +54,11 @@ jobs:
       - name: 🔎 Executar Go Vet
         run: go vet ./...
 
+      - name: 🛡️ Executar Gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          "$(go env GOPATH)/bin/gosec" ./...
+
       - name: 🔨 Compilar aplicação
         run: go build -trimpath -ldflags="-s -w" -o /tmp/evaluation-service .
 
