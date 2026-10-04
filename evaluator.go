@@ -1,14 +1,16 @@
 package main
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,14 +42,14 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 		// Cache HIT
 		var info CombinedFlagInfo
 		if err := json.Unmarshal([]byte(val), &info); err == nil {
-			log.Printf("Cache HIT para flag '%s'", flagName)
+			log.Printf("Cache HIT para flag '%s'", safeLogValue(flagName))
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		log.Printf("Erro ao desserializar cache para flag '%s': %v", flagName, err)
+		log.Printf("Erro ao desserializar cache para flag '%s': %s", safeLogValue(flagName), safeLogValue(err.Error()))
 	}
 
-	log.Printf("Cache MISS para flag '%s'", flagName)
+	log.Printf("Cache MISS para flag '%s'", safeLogValue(flagName))
 	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
 	if err != nil {
@@ -57,7 +59,9 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	// 3. Salvar no Cache
 	jsonData, err := json.Marshal(info)
 	if err == nil {
-		a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err()
+		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
+			log.Printf("Erro ao salvar resultado no cache: %s", safeLogValue(err.Error()))
+		}
 	}
 
 	return info, nil
@@ -90,7 +94,7 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 		return nil, flagErr
 	}
 	if ruleErr != nil {
-		log.Printf("Aviso: Nenhuma regra de segmentação encontrada para '%s'. Usando padrão.", flagName)
+		log.Printf("Aviso: Nenhuma regra de segmentação encontrada para '%s'. Usando padrão.", safeLogValue(flagName))
 	}
 
 	return &CombinedFlagInfo{
@@ -101,13 +105,14 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 
 // fetchFlag (função helper)
 func (a *App) fetchFlag(flagName string) (*Flag, error) {
-	url := fmt.Sprintf("%s/flags/%s", a.FlagServiceURL, flagName)
-
 	apiKey := os.Getenv("SERVICE_API_KEY")
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := newServiceRequest(a.FlagServiceURL, "flag-service", "flags", flagName, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao criar requisição para flag-service: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- URL validada e limitada ao flag-service.
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar flag-service: %w", err)
 	}
@@ -120,7 +125,10 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 		return nil, fmt.Errorf("flag-service retornou status %d", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler resposta do flag-service: %w", err)
+	}
 	var flag Flag
 	if err := json.Unmarshal(body, &flag); err != nil {
 		return nil, fmt.Errorf("erro ao desserializar resposta do flag-service: %w", err)
@@ -129,12 +137,14 @@ func (a *App) fetchFlag(flagName string) (*Flag, error) {
 }
 
 func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
-	url := fmt.Sprintf("%s/rules/%s", a.TargetingServiceURL, flagName)
 	apiKey := os.Getenv("SERVICE_API_KEY") // Usa a mesma chave
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := newServiceRequest(a.TargetingServiceURL, "targeting-service", "rules", flagName, apiKey)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao criar requisição para targeting-service: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := a.HttpClient.Do(req)
+	resp, err := a.HttpClient.Do(req) // #nosec G704 -- URL validada e limitada ao targeting-service.
 	if err != nil {
 		return nil, fmt.Errorf("erro ao chamar targeting-service: %w", err)
 	}
@@ -147,7 +157,10 @@ func (a *App) fetchRule(flagName string) (*TargetingRule, error) {
 		return nil, fmt.Errorf("targeting-service retornou status %d", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao ler resposta do targeting-service: %w", err)
+	}
 	var rule TargetingRule
 	if err := json.Unmarshal(body, &rule); err != nil {
 		return nil, fmt.Errorf("erro ao desserializar resposta do targeting-service: %w", err)
@@ -171,7 +184,7 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 		// Converte o 'value' (que é interface{}) para float64
 		percentage, ok := rule.Value.(float64)
 		if !ok {
-			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag '%s'", info.Flag.Name)
+			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag '%s'", safeLogValue(info.Flag.Name))
 			return false
 		}
 
@@ -187,14 +200,40 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 }
 
 func getDeterministicBucket(input string) int {
-	// Usamos SHA1 (rápido) e pegamos os primeiros 4 bytes
-	hasher := sha1.New()
-	hasher.Write([]byte(input))
-	hash := hasher.Sum(nil)
+	// SHA-256 mantém o resultado determinístico sem usar um algoritmo fraco.
+	hash := sha256.Sum256([]byte(input))
 
 	// Converte 4 bytes para um uint32
 	val := binary.BigEndian.Uint32(hash[:4])
 
 	// Retorna o módulo 100
 	return int(val % 100)
+}
+
+func newServiceRequest(baseURL, expectedService, resource, resourceID, apiKey string) (*http.Request, error) {
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("URL inválida: %w", err)
+	}
+
+	host := strings.ToLower(parsedURL.Hostname())
+	allowedClusterHost := expectedService + "." + expectedService + ".svc.cluster.local"
+	if (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") ||
+		parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" ||
+		(parsedURL.Path != "" && parsedURL.Path != "/") ||
+		(host != expectedService && host != allowedClusterHost && host != "localhost" && host != "127.0.0.1") {
+		return nil, fmt.Errorf("host não permitido para %s", expectedService)
+	}
+
+	parsedURL.Path = strings.TrimRight(parsedURL.Path, "/") + "/" + resource + "/" + url.PathEscape(resourceID)
+	request, err := http.NewRequest(http.MethodGet, parsedURL.String(), nil) // #nosec G704 -- URL validada por esquema e allowlist de host.
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	return request, nil
+}
+
+func safeLogValue(value string) string {
+	return strings.NewReplacer("\r", "\\r", "\n", "\\n").Replace(value)
 }

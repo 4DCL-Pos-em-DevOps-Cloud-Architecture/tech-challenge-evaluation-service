@@ -21,7 +21,7 @@ type EvaluationEvent struct {
 func (a *App) sendEvaluationEvent(userID, flagName string, result bool) {
 	// Se a URL da fila não foi configurada, apenas loga localmente e sai.
 	if a.SqsSvc == nil || a.SqsQueueURL == "" {
-		log.Printf("[SQS_DISABLED] Evento: User '%s', Flag '%s', Result '%t'", userID, flagName, result)
+		log.Printf("[SQS_DISABLED] Evento: User '%s', Flag '%s', Result '%t'", safeLogValue(userID), safeLogValue(flagName), result)
 		return
 	}
 
@@ -34,7 +34,7 @@ func (a *App) sendEvaluationEvent(userID, flagName string, result bool) {
 
 	body, err := json.Marshal(event)
 	if err != nil {
-		log.Printf("Erro ao serializar evento SQS: %v", err)
+		log.Printf("Erro ao serializar evento SQS: %s", safeLogValue(err.Error()))
 		return
 	}
 
@@ -45,8 +45,8 @@ func (a *App) sendEvaluationEvent(userID, flagName string, result bool) {
 	})
 
 	if err != nil {
-		log.Printf("Erro ao enviar mensagem para SQS: %v", err)
+		log.Printf("Erro ao enviar mensagem para SQS: %s", safeLogValue(err.Error()))
 	} else {
-		log.Printf("Evento de avaliação enviado para SQS (Flag: %s)", flagName)
+		log.Printf("Evento de avaliação enviado para SQS (Flag: %s)", safeLogValue(flagName))
 	}
 }

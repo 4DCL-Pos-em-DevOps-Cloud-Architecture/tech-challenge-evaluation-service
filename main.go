@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -36,6 +37,11 @@ func main() {
 	if port == "" {
 		port = "8004"
 	}
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		log.Fatalf("PORT inválida: %s", safeLogValue(port))
+	}
+	port = strconv.Itoa(portNumber)
 
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL == "" {
@@ -68,11 +74,11 @@ func main() {
 	// Cliente Redis
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		log.Fatalf("Não foi possível parsear a URL do Redis: %v", err)
+		log.Fatalf("Não foi possível parsear a URL do Redis: %s", safeLogValue(err.Error()))
 	}
 	rdb := redis.NewClient(opt)
 	if _, err := rdb.Ping(ctx).Result(); err != nil {
-		log.Fatalf("Não foi possível conectar ao Redis: %v", err)
+		log.Fatalf("Não foi possível conectar ao Redis: %s", safeLogValue(err.Error()))
 	}
 	log.Println("Conectado ao Redis com sucesso!")
 
@@ -87,7 +93,7 @@ func main() {
 
 		sess, err := session.NewSession(config)
 		if err != nil {
-			log.Fatalf("Não foi possível criar sessão AWS: %v", err)
+			log.Fatalf("Não foi possível criar sessão AWS: %s", safeLogValue(err.Error()))
 		}
 		sqsSvc = sqs.New(sess)
 		log.Println("Cliente SQS inicializado com sucesso.")
@@ -95,7 +101,7 @@ func main() {
 		if sqsEndpointURL != "" {
 			queueName := path.Base(sqsQueueURL)
 			if queueName == "" || queueName == "." || queueName == "/" {
-				log.Fatalf("Não foi possível derivar o nome da fila a partir de AWS_SQS_URL: %s", sqsQueueURL)
+				log.Fatalf("Não foi possível derivar o nome da fila a partir de AWS_SQS_URL: %s", safeLogValue(sqsQueueURL))
 			}
 
 			var ensureErr error
@@ -106,13 +112,13 @@ func main() {
 				if ensureErr == nil {
 					break
 				}
-				log.Printf("Aguardando SQS local ficar pronto (%d/30): %v", attempt, ensureErr)
+				log.Printf("Aguardando SQS local ficar pronto (%d/30): %s", attempt, safeLogValue(ensureErr.Error()))
 				time.Sleep(1 * time.Second)
 			}
 			if ensureErr != nil {
-				log.Fatalf("Não foi possível garantir a fila SQS local '%s': %v", queueName, ensureErr)
+				log.Fatalf("Não foi possível garantir a fila SQS local '%s': %s", safeLogValue(queueName), safeLogValue(ensureErr.Error()))
 			}
-			log.Printf("Fila SQS local garantida: %s", queueName)
+			log.Printf("Fila SQS local garantida: %s", safeLogValue(queueName))
 		}
 	}
 
@@ -136,8 +142,16 @@ func main() {
 	mux.HandleFunc("/health", app.healthHandler)
 	mux.HandleFunc("/evaluate", app.evaluationHandler)
 
-	log.Printf("Serviço de Avaliação (Go) rodando na porta %s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal(err)
+	log.Printf("Serviço de Avaliação (Go) rodando na porta %s", safeLogValue(port))
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(safeLogValue(err.Error()))
 	}
 }
