@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: configmap
+  namespace: evaluation-service
+data:
+  AWS_REGION: us-east-1
+  AUTH_SERVICE_URL: "http://auth-service.auth-service.svc.cluster.local:8001"
+  FLAG_SERVICE_URL: "http://flag-service.flag-service.svc.cluster.local:8002"
+  TARGETING_SERVICE_URL: "http://targeting-service.targeting-service.svc.cluster.local:8003"
+  AWS_SQS_URL: "<URL_DA_FILA_SQS>"
+  REDIS_URL: "<URL_DO_REDIS>"
+
+
