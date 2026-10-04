@@ -16,7 +16,7 @@ func (a *App) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
-		log.Printf("Erro ao escrever resposta de health check: %s", safeLogValue(err.Error()))
+		log.Printf("Erro ao escrever resposta de health check")
 	}
 }
 
@@ -40,7 +40,7 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 			result = false
 		} else {
 			// Outros erros (serviços offline, etc)
-			log.Printf("Erro ao avaliar flag '%s': %s", safeLogValue(flagName), safeLogValue(err.Error()))
+			log.Printf("Erro ao avaliar flag")
 			http.Error(w, `{"error": "Erro interno ao avaliar a flag"}`, http.StatusBadGateway)
 			return
 		}
@@ -57,6 +57,6 @@ func (a *App) evaluationHandler(w http.ResponseWriter, r *http.Request) {
 		UserID:   userID,
 		Result:   result,
 	}); err != nil {
-		log.Printf("Erro ao escrever resposta de avaliação: %s", safeLogValue(err.Error()))
+		log.Printf("Erro ao escrever resposta de avaliação")
 	}
 }

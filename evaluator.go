@@ -42,14 +42,14 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 		// Cache HIT
 		var info CombinedFlagInfo
 		if err := json.Unmarshal([]byte(val), &info); err == nil {
-			log.Printf("Cache HIT para flag '%s'", safeLogValue(flagName))
+			log.Printf("Cache HIT")
 			return &info, nil
 		}
 		// Se o unmarshal falhar, trata como cache miss
-		log.Printf("Erro ao desserializar cache para flag '%s': %s", safeLogValue(flagName), safeLogValue(err.Error()))
+		log.Printf("Erro ao desserializar cache")
 	}
 
-	log.Printf("Cache MISS para flag '%s'", safeLogValue(flagName))
+	log.Printf("Cache MISS")
 	// 2. Cache MISS - Buscar dos serviços
 	info, err := a.fetchFromServices(flagName)
 	if err != nil {
@@ -60,7 +60,7 @@ func (a *App) getCombinedFlagInfo(flagName string) (*CombinedFlagInfo, error) {
 	jsonData, err := json.Marshal(info)
 	if err == nil {
 		if err := a.RedisClient.Set(ctx, cacheKey, jsonData, CACHE_TTL).Err(); err != nil {
-			log.Printf("Erro ao salvar resultado no cache: %s", safeLogValue(err.Error()))
+			log.Printf("Erro ao salvar resultado no cache")
 		}
 	}
 
@@ -94,7 +94,7 @@ func (a *App) fetchFromServices(flagName string) (*CombinedFlagInfo, error) {
 		return nil, flagErr
 	}
 	if ruleErr != nil {
-		log.Printf("Aviso: Nenhuma regra de segmentação encontrada para '%s'. Usando padrão.", safeLogValue(flagName))
+		log.Printf("Aviso: Nenhuma regra de segmentação encontrada. Usando padrão.")
 	}
 
 	return &CombinedFlagInfo{
@@ -184,7 +184,7 @@ func (a *App) runEvaluationLogic(info *CombinedFlagInfo, userID string) bool {
 		// Converte o 'value' (que é interface{}) para float64
 		percentage, ok := rule.Value.(float64)
 		if !ok {
-			log.Printf("Erro: valor da regra de porcentagem não é um número para a flag '%s'", safeLogValue(info.Flag.Name))
+			log.Printf("Erro: valor da regra de porcentagem não é um número")
 			return false
 		}
 
@@ -232,8 +232,4 @@ func newServiceRequest(baseURL, expectedService, resource, resourceID, apiKey st
 	}
 	request.Header.Set("Authorization", "Bearer "+apiKey)
 	return request, nil
-}
-
-func safeLogValue(value string) string {
-	return strings.NewReplacer("\r", "\\r", "\n", "\\n").Replace(value)
 }
