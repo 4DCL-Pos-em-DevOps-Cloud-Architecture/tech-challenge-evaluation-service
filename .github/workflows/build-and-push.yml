@@ -9,7 +9,7 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: tech-challenge-evaluation-service
+  ECR_REPOSITORY: togglemaster-evaluation-service
   IMAGE_NAME: evaluation-service
 
 permissions:
