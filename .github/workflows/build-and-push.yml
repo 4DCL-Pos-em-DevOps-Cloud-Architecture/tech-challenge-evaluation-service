@@ -122,8 +122,56 @@ jobs:
           context: .
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v1.${{ github.run_number }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  update-gitops:
+    name: 🔄 Atualizar GitOps
+    needs: publish
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar repositório GitOps
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.GITOPS_REPOSITORY }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          ref: main
+          path: gitops-repo
+
+      - name: Atualizar tag da imagem
+        working-directory: gitops-repo
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import re
+
+          path = Path("gitops/evaluation-service/deployment.yaml")
+          content = path.read_text()
+          updated, count = re.subn(
+              r"(image:\s+[^\s:]+/togglemaster-evaluation-service:)[^\s]+",
+              r"\g<1>" + os.environ["IMAGE_TAG"],
+              content,
+          )
+          if count != 1:
+              raise SystemExit(f"Esperada 1 imagem em {path}, encontradas {count}")
+          path.write_text(updated)
+          PY
+
+      - name: Commitar e publicar alteração GitOps
+        working-directory: gitops-repo
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gitops/evaluation-service/deployment.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update evaluation-service image to ${IMAGE_TAG}"
+          git push origin HEAD:main
